@@ -27,7 +27,7 @@ python scripts/generate_search_demo_gif.py
 ## 方法 1: 使用 Kap（推荐，macOS）
 
 1. 下载并安装 [Kap](https://getkap.co/)
-2. 打开 GitHub Pages 页面：https://jbiaojerry.github.io/ebook-treasure-chest/
+2. 打开 GitHub Pages 页面：https://ciweihaha.github.io/ebook-treasure-chest/
 3. 使用 Kap 录制以下操作：
    - 展示页面加载和统计信息
    - 在搜索框输入关键词（如"文学"、"历史"）
@@ -37,7 +37,7 @@ python scripts/generate_search_demo_gif.py
 
 ## 方法 2: 使用 macOS 屏幕录制 + ffmpeg 转换
 
-1. 打开 GitHub Pages 页面：https://jbiaojerry.github.io/ebook-treasure-chest/
+1. 打开 GitHub Pages 页面：https://ciweihaha.github.io/ebook-treasure-chest/
 2. 使用 macOS 内置的屏幕录制功能（Command+Shift+5）录制搜索演示
 3. 安装 gifsicle（如果未安装）：
    ```bash
