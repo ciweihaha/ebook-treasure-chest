@@ -14,7 +14,7 @@ import sys
 
 ROOT = Path(__file__).parent.parent
 OUTPUT_GIF = ROOT / ".github" / "search-demo.gif"
-GITHUB_PAGES_URL = "https://jbiaojerry.github.io/ebook-treasure-chest/"
+GITHUB_PAGES_URL = "https://ciweihaha.github.io/ebook-treasure-chest/"
 
 def check_dependencies():
     """检查依赖是否安装"""
