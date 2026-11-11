@@ -87,11 +87,16 @@ function escapeRegex(str) {
 
 function highlightText(text, keyword) {
   if (!keyword || !text) return escapeHtml(text);
-  
-  // 转义正则表达式特殊字符，防止正则表达式注入
-  const escapedKeyword = escapeRegex(keyword);
-  const regex = new RegExp(`(${escapedKeyword})`, 'gi');
-  
+
+  // 按空格拆成多个关键词逐个高亮：旧代码拿整串短语建正则，
+  // 关键词分处标题/作者两处、或在同一字段不相邻时（如搜"三体 刘慈欣"，
+  // 标题只有"三体"）整串匹配不到，高亮全丢。按长度降序排，
+  // 长词优先，避免短词先吞掉长词的一部分。
+  const parts = keyword.split(/\s+/).filter(Boolean).map(escapeRegex);
+  if (parts.length === 0) return escapeHtml(text);
+  parts.sort((a, b) => b.length - a.length);
+  const regex = new RegExp(`(${parts.join('|')})`, 'gi');
+
   // 先转义 HTML，再添加高亮标记
   const escapedText = escapeHtml(text);
   return escapedText.replace(regex, '<mark>$1</mark>');
