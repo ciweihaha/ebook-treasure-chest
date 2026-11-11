@@ -4,6 +4,7 @@
 解析 md 目录下的所有 Markdown 文件，生成统一的 JSON 数据文件
 """
 
+import html
 import json
 import re
 from pathlib import Path
@@ -68,10 +69,15 @@ def parse_markdown_table(content):
             title = match.group(1).strip()
             author = match.group(2).strip()
             link = match.group(3).strip()
-            
+
             # 清理数据
             title = title.replace('**', '').strip()
             author = author.replace('**', '').strip()
+            # 上游 md 里混有 HTML 数字实体（如 &#8211;、&#038;、&#8217;），
+            # 不解码会原样进 JSON：搜索页 escapeHtml 后显示成字面 "&#8211;"，
+            # 且搜真实字符（–、&、'）匹配不到。链接不含实体，不动。
+            title = html.unescape(title)
+            author = html.unescape(author)
             
             if title and link:  # 确保有书名和链接
                 books.append({
@@ -98,7 +104,7 @@ def parse_single_file(file_path):
     
     # 优先使用文件内容中的分类名（更准确）
     if category_from_content and category_from_content != category:
-        category = category_from_content
+        category = html.unescape(category_from_content)
     
     # 解析表格
     books = parse_markdown_table(content)
