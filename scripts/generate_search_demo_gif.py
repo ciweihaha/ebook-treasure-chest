@@ -116,13 +116,20 @@ async def generate_gif():
             # 等待搜索框出现，说明页面已加载
             await page.wait_for_selector('input[type="text"]', timeout=10000)
             await asyncio.sleep(3)  # 等待 all-books.json 加载
-            # 检查数据是否加载完成
-            data_loaded = await page.evaluate("""() => {
-                return window.books && window.books.length > 0;
-            }""")
-            if data_loaded:
+            # 检查数据是否加载完成：search.js 加载完会把搜索框 placeholder
+            # 换成"已加载 N 本书..."持续 3 秒。旧代码查 window.books，
+            # 但顶层 let 不挂 window，永远是假，这个确认从未生效过。
+            # 改为轮询 placeholder；超时只警告、不中断（后边搜结果时还会再等）。
+            try:
+                await page.wait_for_function(
+                    """() => {
+                        const input = document.querySelector('input[type="text"]');
+                        return input && input.placeholder.includes('已加载');
+                    }""",
+                    timeout=20000
+                )
                 print(f"  ✅ 数据加载完成（已加载书籍数据）")
-            else:
+            except Exception:
                 print(f"  ⚠️  数据可能还在加载中，继续...")
             screenshots.append(await page.screenshot())
             
