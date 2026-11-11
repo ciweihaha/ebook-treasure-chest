@@ -129,7 +129,10 @@ def render_content(grouped, stats=None):
         category_counts[category] = count
     
     # 按书籍数量排序，优先显示热门分类
-    sorted_categories = sorted(category_counts.keys(), key=lambda x: category_counts[x], reverse=True)
+    # 数量相同按分类名排序：旧代码只按数量排，同数量分类的顺序取决于
+    # all-books.json 里的出现顺序（上游 glob 顺序），不同机器跑出来不一样，
+    # 首页前 20 分类的入选/排序会在边界处抖动。加名字作第二关键字后输出确定。
+    sorted_categories = sorted(category_counts.keys(), key=lambda x: (-category_counts[x], x))
     
     # 优先显示用户指定的热门分类
     priority_categories = ["文学", "沟通", "励志", "经典", "历史", "科普", "管理", "社会", "推理", "经济", "哲学", "传记"]
