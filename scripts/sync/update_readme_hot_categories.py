@@ -60,8 +60,10 @@ def get_all_categories() -> dict:
 
 def generate_hot_categories_section(categories: dict) -> str:
     """生成热门分类章节内容"""
-    # 按书籍数量排序
-    sorted_categories = sorted(categories.items(), key=lambda x: x[1], reverse=True)
+    # 按书籍数量降序，数量相同按分类名排序：旧代码只按数量排，
+    # 同数量分类的顺序取决于 glob 返回顺序，不同机器/不同次跑出来不一样，
+    # 每次同步都会把整节重排一遍（纯噪音 diff）。加名字作第二关键字后输出确定。
+    sorted_categories = sorted(categories.items(), key=lambda x: (-x[1], x[0]))
     
     lines = []
     lines.append("## 🔥 热门分类")
@@ -112,8 +114,15 @@ def update_readme():
     
     match = re.search(pattern, content, re.DOTALL | re.MULTILINE)
     if match:
-        # 替换匹配的内容
-        new_content = re.sub(pattern, r'\1' + new_section, content, flags=re.DOTALL | re.MULTILINE)
+        # 必须用替换函数，不能用 r'\1' + new_section 作替换串：
+        # re.sub 会解析替换串里的反斜杠转义，分类名一旦含 \1、\g<...> 之类
+        # （文件名里反斜杠合法），就会被当成组引用展开，悄悄写坏 README。
+        # 另外 new_section 自带 "## 🔥 热门分类" 标题头，不能再拼 group(1)，
+        # 否则每跑一次标题就重复一行。
+        new_content = re.sub(
+            pattern,
+            lambda m: new_section,
+            content, flags=re.DOTALL | re.MULTILINE)
         
         # 写入文件
         README_FILE.write_text(new_content, encoding='utf-8')
