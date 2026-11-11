@@ -294,8 +294,10 @@ def generate_hot_categories_index(books_by_tag: Dict[str, List[Dict]], output_di
     output_dir.mkdir(parents=True, exist_ok=True)
     file_path = output_dir / "热门分类.md"
     
-    # 按书籍数量排序
-    sorted_tags = sorted(books_by_tag.items(), key=lambda x: len(x[1]), reverse=True)
+    # 按书籍数量降序，数量相同按标签名排序：旧代码只按数量排，
+    # 同数量标签的顺序取决于传入字典的插入顺序（上游抓取/ glob 顺序），
+    # 不同次跑出来不一样，热门分类索引会无故重排。加名字作第二关键字后输出确定。
+    sorted_tags = sorted(books_by_tag.items(), key=lambda x: (-len(x[1]), x[0]))
     
     # 生成内容
     lines = []
