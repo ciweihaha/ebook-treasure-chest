@@ -171,25 +171,33 @@ async def fetch_book_async(session: aiohttp.ClientSession, book_id: int, semapho
                 result['book_id'] = str(book_id)
                 return result
             else:
-                return None
+                # 页面存在但无书名：该 ID 永久缺失（如下架/404），
+                # 用标记返回，调用方记为已处理、不再重试。
+                # 注意与下面异常返回的 None 区分：None 表示 transient 失败，
+                # 下次同步要重试，不能记为已处理。
+                return {'book_id': str(book_id), '_not_found': True}
                 
         except Exception as e:
             print(f"❌ 处理书籍ID {book_id} 时出错: {e}")
             return None
 
 
-async def batch_process_books(book_ids: List[int]) -> Dict[str, List[Dict]]:
+async def batch_process_books(book_ids: List[int]):
     """
     批量处理书籍
-    
+
     Args:
         book_ids: 书籍ID列表
-    
+
     Returns:
-        按标签分类的书籍字典 {tag: [books]}
+        三元组 (按标签分类的书籍字典, 成功处理的ID集合, 永久缺失的ID集合)。
+        transient 失败（异常）的 ID 不在任何一个集合里，调用方不得记为已处理，
+        否则下次同步不会重试，该书永久漏掉。
     """
     # 按标签分类的书籍
     books_by_tag = defaultdict(list)
+    succeeded_ids = set()
+    missing_ids = set()
     
     # 创建信号量控制并发
     semaphore = asyncio.Semaphore(MAX_CONCURRENT)
@@ -207,7 +215,11 @@ async def batch_process_books(book_ids: List[int]) -> Dict[str, List[Dict]]:
             book_data = await coro
             completed += 1
             
-            if book_data:
+            if book_data and book_data.get('_not_found'):
+                # 永久缺失：记下，不进书库，下次不再重试
+                missing_ids.add(int(book_data['book_id']))
+            elif book_data:
+                succeeded_ids.add(int(book_data['book_id']))
                 # 按标签分类
                 tags = book_data.get('tags', [])
                 if tags:
@@ -228,7 +240,7 @@ async def batch_process_books(book_ids: List[int]) -> Dict[str, List[Dict]]:
                 if completed % 50 == 0 or completed == total:
                     print(f"📊 进度: {completed}/{total} ({completed*100//total}%)")
     
-    return dict(books_by_tag)
+    return dict(books_by_tag), succeeded_ids, missing_ids
 
 
 def save_processed_ids(book_ids: Set[int]):
@@ -349,7 +361,7 @@ async def main(start_id: int = 1, end_id: int = 1000):
     
     # 开始处理
     start_time = time.time()
-    books_by_tag = await batch_process_books(book_ids)
+    books_by_tag, succeeded_ids, missing_ids = await batch_process_books(book_ids)
     elapsed_time = time.time() - start_time
     
     # 统计信息
@@ -385,15 +397,19 @@ async def main(start_id: int = 1, end_id: int = 1000):
     }
     save_stats(stats)
     
-    # 保存已处理的ID
-    all_processed = processed_ids | set(book_ids)
+    # 保存已处理的ID：只记成功和永久缺失的，transient 失败的不记，
+    # 下次运行会重试。旧代码把全部尝试过的 ID 都记上，失败的书永久漏掉。
+    all_processed = processed_ids | succeeded_ids | missing_ids
     save_processed_ids(all_processed)
     
-    # 保存最大书籍ID（用于增量更新）
-    if book_ids:
-        max_id = max(book_ids)
-        save_max_book_id(max_id)
-        print(f"\n📊 最大书籍ID: {max_id}（已保存，用于增量更新）")
+    # 保存最大书籍ID：只推进到连续已处理（成功或永久缺失）的边界。
+    # 旧代码直接取 max(book_ids)，会跳过中间失败的 ID，增量同步再也不会回来补。
+    contiguous_max = load_max_book_id()
+    done_ids = succeeded_ids | missing_ids
+    while contiguous_max + 1 in done_ids:
+        contiguous_max += 1
+    save_max_book_id(contiguous_max)
+    print(f"\n📊 最大书籍ID: {contiguous_max}（已保存，用于增量更新）")
     
     # 生成热门分类索引文件
     print(f"\n📝 生成热门分类索引文件...")
