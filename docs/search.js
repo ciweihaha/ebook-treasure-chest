@@ -97,6 +97,25 @@ function highlightText(text, keyword) {
   return escapedText.replace(regex, '<mark>$1</mark>');
 }
 
+// 下载链接校验：只接受绝对 http(s) 链接。
+// 数据里有 69 本书的 link 是 "链接未找到" 这类占位文本；旧代码用
+// new URL(link, origin) 解析会把它拼成站内相对地址
+// （https://ciweihaha.github.io/ebook-treasure-chest/%E9%93%BE...），
+// 点"下载"就落到本站 404。无效链接返回 null，调用方渲染禁用态。
+function getSafeDownloadLink(link) {
+  if (!link || typeof link !== 'string') return null;
+  if (!/^https?:\/\//i.test(link.trim())) return null;
+  try {
+    const url = new URL(link.trim());
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return url.href;
+    }
+  } catch (e) {
+    // 解析失败：无效链接
+  }
+  return null;
+}
+
 function renderResults(results, keyword) {
   const box = document.getElementById("search-results");
   box.innerHTML = "";
@@ -136,33 +155,11 @@ function renderResults(results, keyword) {
     const highlightedAuthor = highlightText(b.author || "未知", keywordLower);
     const highlightedCategory = highlightText(b.category || "", keywordLower);
     
-    // 验证和转义链接 URL，防止 javascript: 协议等 XSS 攻击
-    let safeLink = "#";
-    if (b.link) {
-      try {
-        const url = new URL(b.link, window.location.origin);
-        // 只允许 http、https 协议
-        if (url.protocol === 'http:' || url.protocol === 'https:') {
-          safeLink = url.href;
-        }
-      } catch (e) {
-        // 如果 URL 解析失败，使用原始链接（可能是相对路径）
-        // 但需要转义 HTML 特殊字符
-        safeLink = escapeHtml(b.link);
-      }
-    }
-    
-    div.innerHTML = `
-      <div style="margin-bottom: 10px;">
-        <strong style="font-size: 16px; color: #93a1a1; font-weight: 600;">${highlightedTitle}</strong>
-      </div>
-      <div style="color: #657b83; font-size: 14px; margin-bottom: 10px; font-family: 'SF Mono', 'Monaco', monospace;">
-        <span>👤 ${highlightedAuthor}</span>
-        <span style="margin: 0 10px; color: #586e75;">|</span>
-        <span>📂 ${highlightedCategory}</span>
-      </div>
-      <div>
-        <a href="${safeLink}" target="_blank" rel="noopener" style="
+    // 校验下载链接：无效链接（如数据里的"链接未找到"）不生成可点链接，
+    // 改为禁用态文字，避免点"下载"落到本站 404
+    const safeLink = getSafeDownloadLink(b.link);
+    const downloadHtml = safeLink
+      ? `<a href="${safeLink}" target="_blank" rel="noopener" style="
           display: inline-block;
           padding: 6px 14px;
           background: #268bd2;
@@ -174,9 +171,31 @@ function renderResults(results, keyword) {
           font-family: 'SF Mono', 'Monaco', monospace;
           transition: all 0.2s ease;
           box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        " onmouseover="this.style.background='#2aa198'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(42, 161, 152, 0.4)';" 
+        " onmouseover="this.style.background='#2aa198'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(42, 161, 152, 0.4)';"
            onmouseout="this.style.background='#268bd2'; this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.2)';"
-        >📥 下载</a>
+        >📥 下载</a>`
+      : `<span style="
+          display: inline-block;
+          padding: 6px 14px;
+          background: #073642;
+          color: #586e75;
+          border: 1px solid #586e75;
+          border-radius: 6px;
+          font-size: 14px;
+          font-family: 'SF Mono', 'Monaco', monospace;
+          cursor: not-allowed;
+        ">暂无下载链接</span>`;
+    div.innerHTML = `
+      <div style="margin-bottom: 10px;">
+        <strong style="font-size: 16px; color: #93a1a1; font-weight: 600;">${highlightedTitle}</strong>
+      </div>
+      <div style="color: #657b83; font-size: 14px; margin-bottom: 10px; font-family: 'SF Mono', 'Monaco', monospace;">
+        <span>👤 ${highlightedAuthor}</span>
+        <span style="margin: 0 10px; color: #586e75;">|</span>
+        <span>📂 ${highlightedCategory}</span>
+      </div>
+      <div>
+        ${downloadHtml}
       </div>
     `;
     box.appendChild(div);
