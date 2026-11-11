@@ -5,6 +5,7 @@
 使用 playwright 自动化浏览器操作并录制 GIF
 """
 import asyncio
+import os
 import time
 import io
 from pathlib import Path
@@ -92,8 +93,10 @@ async def generate_gif():
     screenshots = []
     
     async with async_playwright() as p:
-        # 启动浏览器（无头模式）
-        browser = await p.chromium.launch(headless=False)  # 设置为 False 以便观察
+        # 默认无头运行：脚本是自动化用途，旧代码写死 headless=False，
+        # 在 CI/无显示器的机器上启动即失败。本地想看过程时设 GIF_HEADLESS=false。
+        headless = os.environ.get("GIF_HEADLESS", "true").lower() != "false"
+        browser = await p.chromium.launch(headless=headless)
         context = await browser.new_context(
             viewport={'width': 1280, 'height': 720},
             device_scale_factor=1
