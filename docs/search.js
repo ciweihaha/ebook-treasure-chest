@@ -12,6 +12,12 @@ async function loadBooks() {
     
     if (res.ok) {
       const data = await res.json();
+      // 数据必须是数组：万一 JSON 被写坏成对象，旧代码会直接 books = data，
+      // 之后每次搜索都在 books.filter 上抛 TypeError，页面静默不可用。
+      // 这里抛错走降级分支，尝试 books.json。
+      if (!Array.isArray(data)) {
+        throw new Error("all-books.json 不是数组");
+      }
       books = data;
       console.log(`✅ 已加载 ${books.length} 本书籍（来自 all-books.json）`);
       
@@ -37,7 +43,11 @@ async function loadBooks() {
     console.log("📥 尝试加载 books.json...");
     const res = await fetch("books.json");
     if (res.ok) {
-      books = await res.json();
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error("books.json 不是数组");
+      }
+      books = data;
       console.log(`✅ 已加载 ${books.length} 本书籍（来自 books.json，metadata 数据）`);
       console.warn("💡 提示：建议运行 'python scripts/parse_md_to_json.py' 生成完整的 all-books.json");
     } else {
@@ -50,7 +60,7 @@ async function loadBooks() {
 }
 
 function searchBooks(keyword) {
-  if (!keyword || keyword.trim() === "") {
+  if (!Array.isArray(books) || !keyword || keyword.trim() === "") {
     return [];
   }
   
