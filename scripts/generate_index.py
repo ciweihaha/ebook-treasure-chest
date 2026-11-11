@@ -1,3 +1,4 @@
+import html
 import json
 import re
 from collections import defaultdict
@@ -45,9 +46,11 @@ def group_books(books):
     categories, languages, levels = set(), set(), set()
 
     for b in books:
-        c = b["category"]
-        l = b["language"]
-        lv = b["level"]
+        # 缺字段的脏数据以前直接 KeyError，整个站生成失败；
+        # 现在落到默认值，只影响这一本，不拖垮全站。
+        c = b.get("category") or "未分类"
+        l = b.get("language") or "ZH"
+        lv = b.get("level") or "Unknown"
 
         categories.add(c)
         languages.add(l)
@@ -64,7 +67,7 @@ def render_overview(total_books, total_categories, languages, levels):
     cats_display = f"{total_categories:,}" if total_categories > 1000 else str(total_categories)
     
     # 语言显示
-    lang_display = " / ".join(sorted(languages)) if languages else "中文 / 英文"
+    lang_display = " / ".join(html.escape(l) for l in sorted(languages)) if languages else "中文 / 英文"
     
     return f"""## 📊 统计概览
 
@@ -145,13 +148,15 @@ def render_content(grouped, stats=None):
 
     for category in sorted_categories:
         lines.append(f"<div class=\"category-section\">\n")
-        lines.append(f"## 📂 {category}\n")
+        # 分类名进 <h2> 前转义：数据里已有含 & 的分类/标题，
+        # 不转义会在首页把 & 写成裸字符、把 <script> 写成真标签
+        lines.append(f"## 📂 {html.escape(category)}\n")
 
         for language in sorted(grouped[category].keys()):
-            lines.append(f"### 🌍 Language: {language}\n")
+            lines.append(f"### 🌍 Language: {html.escape(str(language))}\n")
 
             for level in sorted(grouped[category][language].keys()):
-                lines.append(f"#### ⭐ Level: {level}\n")
+                lines.append(f"#### ⭐ Level: {html.escape(str(level))}\n")
 
                 books_list = grouped[category][language][level]
                 # 每个分类-语言-级别组合最多显示10本书
@@ -161,13 +166,15 @@ def render_content(grouped, stats=None):
                     lines.append(f"<p class=\"note-text\">*（共 {len(grouped[category][language][level])} 本，显示前 {max_books_per_section} 本）*</p>\n")
 
                 for b in books_list:
-                    formats = ", ".join(b.get("formats", []))
-                    author = b.get('author', '未知')
+                    formats = html.escape(", ".join(b.get("formats", []) or []))
+                    author = html.escape(b.get('author') or '未知')
+                    title = html.escape(b.get('title') or '未知')
+                    link = html.escape(b.get('link') or '#', quote=True)
                     lines.append(
                         f"<div class=\"book-item\">\n"
-                        f"<strong>{b['title']}</strong>\n"
+                        f"<strong>{title}</strong>\n"
                         f"<div class=\"book-meta\">👤 {author} ｜ 📥 {formats}</div>\n"
-                        f"<a href=\"{b['link']}\" target=\"_blank\" rel=\"noopener\" class=\"book-link\">📥 下载</a>\n"
+                        f"<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"book-link\">📥 下载</a>\n"
                         f"</div>\n"
                     )
 
