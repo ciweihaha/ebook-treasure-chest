@@ -1,5 +1,6 @@
 let books = [];
 let searchTimeout = null;
+let loadFailed = false; // 两份数据都加载失败后置 true，搜索时不再假装"正在加载"
 const MAX_RESULTS = 100; // 最多显示100条结果
 
 function retryPendingSearch() {
@@ -67,6 +68,7 @@ async function loadBooks() {
     }
   } catch (e) {
     console.error("❌ 无法加载书籍数据", e);
+    loadFailed = true;
     alert("⚠️ 无法加载书籍数据，请检查网络连接或刷新页面重试");
   }
 }
@@ -251,7 +253,10 @@ function onSearch(e) {
   // 检查数据是否已加载
   if (books.length === 0) {
     const box = document.getElementById("search-results");
-    box.innerHTML = "<p style='padding: 20px; text-align: center; color: #d73a49;'>⏳ 正在加载书籍数据，请稍候...</p>";
+    // 两份数据都失败后不再假装"正在加载"，否则用户会一直等下去
+    box.innerHTML = loadFailed
+      ? "<p style='padding: 20px; text-align: center; color: #d73a49;'>❌ 书籍数据加载失败，请刷新页面重试</p>"
+      : "<p style='padding: 20px; text-align: center; color: #d73a49;'>⏳ 正在加载书籍数据，请稍候...</p>";
     return;
   }
   
