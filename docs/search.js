@@ -2,6 +2,16 @@ let books = [];
 let searchTimeout = null;
 const MAX_RESULTS = 100; // 最多显示100条结果
 
+function retryPendingSearch() {
+  // 数据加载完成后补跑一次搜索：加载期间用户已输入关键词时，
+  // onSearch 只会显示"正在加载书籍数据"，加载完没人再触发搜索，
+  // 用户必须删掉重输才出结果。加载完这里补一次即可。
+  const searchBox = document.querySelector('input[type="text"]');
+  if (searchBox && searchBox.value.trim()) {
+    onSearch({ target: searchBox });
+  }
+}
+
 async function loadBooks() {
   console.log("🔄 开始加载书籍数据...");
   
@@ -30,6 +40,7 @@ async function loadBooks() {
           searchBox.placeholder = originalPlaceholder;
         }, 3000);
       }
+      retryPendingSearch();
       return;
     } else {
       console.warn(`⚠️  all-books.json 返回状态码: ${res.status}`);
@@ -50,6 +61,7 @@ async function loadBooks() {
       books = data;
       console.log(`✅ 已加载 ${books.length} 本书籍（来自 books.json，metadata 数据）`);
       console.warn("💡 提示：建议运行 'python scripts/parse_md_to_json.py' 生成完整的 all-books.json");
+      retryPendingSearch();
     } else {
       console.error(`❌ books.json 返回状态码: ${res.status}`);
     }
