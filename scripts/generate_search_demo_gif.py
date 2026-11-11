@@ -185,14 +185,14 @@ async def generate_gif():
         OUTPUT_GIF.parent.mkdir(parents=True, exist_ok=True)
         # 第一帧显示时间稍长，其他帧正常显示
         durations = [2000] + [1500] * (len(images) - 1)  # 第一帧 2 秒，其他 1.5 秒
-        
-        # 使用 save_all 保存多帧，但需要手动设置每帧的持续时间
-        # 由于 PIL 的 save_all 不支持每帧不同 duration，我们使用固定值
+
+        # Pillow 的 save_all 接受 duration 列表（逐帧时长），直接用 durations；
+        # 旧代码算好 durations 却丢弃、写死 1500，第一帧的 2 秒从未生效。
         images[0].save(
             OUTPUT_GIF,
             save_all=True,
             append_images=images[1:],
-            duration=1500,  # 每帧 1.5 秒
+            duration=durations,
             loop=0,
             optimize=True
         )
