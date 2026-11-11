@@ -7,7 +7,7 @@ function retryPendingSearch() {
   // onSearch 只会显示"正在加载书籍数据"，加载完没人再触发搜索，
   // 用户必须删掉重输才出结果。加载完这里补一次即可。
   const searchBox = document.querySelector('input[type="text"]');
-  if (searchBox && searchBox.value.trim()) {
+  if (searchBox && String(searchBox.value || '').trim()) {
     onSearch({ target: searchBox });
   }
 }
