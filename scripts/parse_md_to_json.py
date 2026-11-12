@@ -130,8 +130,11 @@ def main():
     success_files = 0
     error_files = []
     
-    # 获取所有 md 文件
-    md_files = list(MD_DIR.glob("*.md"))
+    # 获取所有 md 文件（按文件名排序：Path.glob 返回顺序随文件系统而定，
+    # 不排序每次重解析都会把 all-books.json 整表重排一遍——内容不变、git diff
+    # 全是噪音，且搜索同分并列的先后次序也跟着抖。只排文件顺序，文件内仍按
+    # 表格原序，书的相对位置不变。）
+    md_files = sorted(MD_DIR.glob("*.md"))
     total_files = len(md_files)
     
     print(f"📁 找到 {total_files} 个 md 文件")
