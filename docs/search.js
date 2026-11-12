@@ -1,6 +1,8 @@
 let books = [];
 let searchTimeout = null;
 let loadFailed = false; // 两份数据都加载失败后置 true，搜索时不再假装"正在加载"
+let booksLoaded = false; // 数据加载已终结（成功或双失败）：与 books.length 区分，
+// 空书库（加载成功但 0 本）不再被当成"还在加载"，否则搜索永远显示"正在加载"
 const MAX_RESULTS = 100; // 最多显示100条结果
 
 function retryPendingSearch() {
@@ -30,6 +32,7 @@ async function loadBooks() {
         throw new Error("all-books.json 不是数组");
       }
       books = data;
+      booksLoaded = true;
       console.log(`✅ 已加载 ${books.length} 本书籍（来自 all-books.json）`);
       
       // 显示加载成功的提示
@@ -60,15 +63,20 @@ async function loadBooks() {
         throw new Error("books.json 不是数组");
       }
       books = data;
+      booksLoaded = true;
       console.log(`✅ 已加载 ${books.length} 本书籍（来自 books.json，metadata 数据）`);
       console.warn("💡 提示：建议运行 'python scripts/parse_md_to_json.py' 生成完整的 all-books.json");
       retryPendingSearch();
     } else {
+      // books.json 也非 200：两份都失败，终结加载态，否则搜索永远显示"正在加载"
       console.error(`❌ books.json 返回状态码: ${res.status}`);
+      loadFailed = true;
+      booksLoaded = true;
     }
   } catch (e) {
     console.error("❌ 无法加载书籍数据", e);
     loadFailed = true;
+    booksLoaded = true;
     alert("⚠️ 无法加载书籍数据，请检查网络连接或刷新页面重试");
   }
 }
@@ -77,22 +85,52 @@ function searchBooks(keyword) {
   if (!Array.isArray(books) || !keyword || keyword.trim() === "") {
     return [];
   }
-  
+
   const k = keyword.toLowerCase().trim();
   const keywords = k.split(/\s+/); // 支持多关键词搜索
 
-  return books.filter(b => {
+  // 相关性排序：旧代码直接按数据原序取前 100 条，热门词（如"历史" 1950 条匹配）
+  // 前 100 里大多是分类/作者命中，224 本标题含"历史"的书被截在 100 名之外，
+  // 用户搜到的全是次相关结果。先打分再取前 100：标题精确=整串 > 标题命中词
+  // 多 > 全部词在标题 > 作者命中 > 分类命中；同分保持数据原序（稳定排序）。
+  // 去重：同一本书（同一下载链接）会出现在多个分类的 md 里，24,071 条里只有
+  // 11,390 本唯一书；不去重搜"极度成功"会把同一本重复显示两次，白占前 100
+  // 名额。按链接去重（无有效链接的按书名+作者），只留第一次出现。
+  const seen = new Set();
+  const scored = [];
+  books.forEach((b, index) => {
     const title = (b.title || "").toLowerCase();
     const author = (b.author || "").toLowerCase();
     const category = (b.category || "").toLowerCase();
-    
-    // 多关键词匹配：所有关键词都要匹配
-    return keywords.every(keyword => 
-      title.includes(keyword) ||
-      author.includes(keyword) ||
-      category.includes(keyword)
+
+    // 匹配条件与旧逻辑一致：每个关键词至少命中标题/作者/分类之一
+    const matched = keywords.every(w =>
+      title.includes(w) || author.includes(w) || category.includes(w)
     );
-  }).slice(0, MAX_RESULTS); // 限制结果数量
+    if (!matched) return;
+
+    // 去重放匹配之后：同一本书在不同分类下的副本，标题/作者相同但分类
+    // 不同；先去重会误杀——如搜"企业"时"管理"副本先出现且不匹配，若已
+    // 占位会导致真正匹配的"企业"副本被跳过。
+    const link = (b.link || "");
+    const key = /^https?:\/\//i.test(link) ? link : `${b.title || ""}\0${b.author || ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    const inTitle = keywords.filter(w => title.includes(w)).length;
+    const inAuthor = keywords.filter(w => author.includes(w)).length;
+    const inCategory = keywords.filter(w => category.includes(w)).length;
+    let score = 0;
+    if (title === k) score += 100; // 标题精确等于整串关键词
+    score += inTitle * 10;
+    if (inTitle === keywords.length) score += 5; // 全部关键词都在标题里
+    score += inAuthor * 3;
+    score += inCategory;
+    scored.push({ book: b, score, index });
+  });
+
+  scored.sort((a, b) => (b.score - a.score) || (a.index - b.index));
+  return scored.slice(0, MAX_RESULTS).map(x => x.book); // 限制结果数量
 }
 
 // HTML 转义函数
@@ -121,9 +159,20 @@ function highlightText(text, keyword) {
   parts.sort((a, b) => b.length - a.length);
   const regex = new RegExp(`(${parts.join('|')})`, 'gi');
 
-  // 先转义 HTML，再添加高亮标记
-  const escapedText = escapeHtml(text);
-  return escapedText.replace(regex, '<mark>$1</mark>');
+  // 在原文上切分、逐段转义再拼高亮：旧代码先转义再套正则，搜 "amp"/"lt"
+  // 会把 &amp;、&lt; 等实体从中间切开（页面显示成字面 "&lt;"），搜 "<"/"&"
+  // 则因转义后无匹配而丢高亮。先在原文匹配、只给匹配段加 <mark>。
+  const raw = String(text);
+  let out = '';
+  let last = 0;
+  let m;
+  while ((m = regex.exec(raw)) !== null) {
+    out += escapeHtml(raw.slice(last, m.index));
+    out += '<mark>' + escapeHtml(m[0]) + '</mark>';
+    last = m.index + m[0].length;
+  }
+  out += escapeHtml(raw.slice(last));
+  return out;
 }
 
 // 下载链接校验：只接受绝对 http(s) 链接。
@@ -253,10 +302,12 @@ function onSearch(e) {
   // 检查数据是否已加载
   if (books.length === 0) {
     const box = document.getElementById("search-results");
-    // 两份数据都失败后不再假装"正在加载"，否则用户会一直等下去
+    // 加载已终结但书库为空（加载成功 0 本）不再假装"正在加载"，否则用户会一直等下去
     box.innerHTML = loadFailed
       ? "<p style='padding: 20px; text-align: center; color: #d73a49;'>❌ 书籍数据加载失败，请刷新页面重试</p>"
-      : "<p style='padding: 20px; text-align: center; color: #d73a49;'>⏳ 正在加载书籍数据，请稍候...</p>";
+      : !booksLoaded
+        ? "<p style='padding: 20px; text-align: center; color: #d73a49;'>⏳ 正在加载书籍数据，请稍候...</p>"
+        : "<p style='padding: 20px; text-align: center; color: #93a1a1;'>📭 书库为空，暂无可搜索的书籍</p>";
     return;
   }
   
