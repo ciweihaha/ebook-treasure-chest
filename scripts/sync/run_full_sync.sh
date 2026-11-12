@@ -11,7 +11,10 @@ echo ""
 # 检查配置文件
 if [ ! -f "config.py" ]; then
     echo "⚠️  配置文件不存在，正在创建..."
-    cp config.py.example config.py
+    if ! cp config.py.example config.py; then
+        echo "❌ 创建 config.py 失败：config.py.example 缺失或不可读"
+        exit 1
+    fi
     echo "✅ 已创建 config.py，请编辑并设置 BOOK_SITE_DOMAIN"
     echo ""
     read -p "按回车键继续（确保已配置config.py）..."

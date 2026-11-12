@@ -152,7 +152,9 @@ def main():
         
         if books:
             all_books.extend(books)
-            category_stats[category] = len(books)
+            # 用 += 累加：两个 md 文件可能解析到同一分类名
+            # （分类名优先取文件内容标题），直接赋值会丢掉前一个文件的计数。
+            category_stats[category] += len(books)
             success_files += 1
         else:
             error_files.append(str(md_file))
