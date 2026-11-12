@@ -172,12 +172,27 @@ def render_content(grouped, stats=None):
                     formats = html.escape(", ".join(b.get("formats", []) or []))
                     author = html.escape(b.get('author') or '未知')
                     title = html.escape(b.get('title') or '未知')
-                    link = html.escape(b.get('link') or '#', quote=True)
+                    # 下载链接校验：只接受绝对 http(s) 链接。数据里有 69 本的 link
+                    # 是"链接未找到"这类占位文本；旧代码直接拼进 href，点"下载"会
+                    # 落到站内相对地址（…/链接未找到）404。搜索页第 14 轮已修成
+                    # 禁用态，这里是同类问题：无效链接改显示"暂无下载链接"，不生成
+                    # 可点链接（当前首页恰好没排到这类书，但分类顺序一变就会中招）。
+                    raw_link = (b.get('link') or '').strip()
+                    if raw_link.startswith('http://') or raw_link.startswith('https://'):
+                        link_html = (
+                            f"<a href=\"{html.escape(raw_link, quote=True)}\" target=\"_blank\" "
+                            f"rel=\"noopener\" class=\"book-link\">📥 下载</a>"
+                        )
+                    else:
+                        link_html = (
+                            "<span class=\"book-link\" style=\"background: #073642; color: #586e75; "
+                            "border: 1px solid #586e75; cursor: not-allowed;\">暂无下载链接</span>"
+                        )
                     lines.append(
                         f"<div class=\"book-item\">\n"
                         f"<strong>{title}</strong>\n"
                         f"<div class=\"book-meta\">👤 {author} ｜ 📥 {formats}</div>\n"
-                        f"<a href=\"{link}\" target=\"_blank\" rel=\"noopener\" class=\"book-link\">📥 下载</a>\n"
+                        f"{link_html}\n"
                         f"</div>\n"
                     )
 
